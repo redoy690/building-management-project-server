@@ -1,9 +1,11 @@
 const express = require('express');
 const app = express();
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
 require('dotenv').config()
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 const port = process.env.PORT || 5000;
-
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 
 
@@ -14,7 +16,7 @@ app.use(express.json());
 
 
 
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.gfjtqgg.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -34,8 +36,105 @@ async function run() {
         const usercollection = client.db('buildingDb').collection('users')
         const announcementcollection = client.db('buildingDb').collection('announcement')
         const couponcollection = client.db('buildingDb').collection('coupon')
+        const paymentcollection = client.db('buildingDb').collection('payment')
 
 
+
+
+        //  ----------------middle ware verify token ---------------------------
+
+        const verifytoken = (req, res, next) => {
+            console.log('inside verify token', req.headers)
+            if (!req.headers.authorization) {
+                return res.status(401).send({ message: 'forbidden access' })
+            }
+            const token = req.headers.authorization.split(' ')[1]
+            jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+                if (err) {
+                    return res.status(401).send({ message: 'forbidden access' })
+                }
+                req.decoded = decoded;
+                next()
+            })
+
+        }
+
+
+        const verifyAdmin = (async(req,res,next)=>{
+            const email = req.decoded.email
+            const query = {email:email};
+            const user = await usercollection.findOne(query)
+            const isAdmin = user?.role === 'admin';
+            if(!isAdmin){
+                return res.status(403).send({message:'forbidden access'})
+            }
+        })
+
+
+        const verifyMember = (async(req,res,next)=>{
+            const email = req.decoded.email
+            const query = {email:email};
+            const user = await usercollection.findOne(query)
+            const isAdmin = user?.role === 'member';
+            if(!isAdmin){
+                return res.status(403).send({message:'forbidden access'})
+            }
+        })
+
+
+
+
+
+
+        app.get('/user/admin/:email',verifytoken, async(req,res)=>{
+              const email = req.params.email;
+              if(email !== req.decoded.email){
+                return res.status(403).send({message: 'forbidden access'})
+              }
+              const query = {email:email}
+              const user = await usercollection.findOne(query)
+              let admin = false;
+              if(user){
+                admin = user?.role == 'admin';
+              }
+              
+              res.send({admin})
+        })
+
+        app.get('/user/member/:email',verifytoken, async(req,res)=>{
+              const email = req.params.email;
+              if(email !== req.decoded.email){
+                return res.status(403).send({message: 'forbidden access'})
+              }
+              const query = {email:email}
+              const user = await usercollection.findOne(query)
+              let member = false;
+              if(user){
+                member = user?.role == 'member';
+              }
+              
+              res.send({member})
+        })
+
+        app.get('/user/user/:email',verifytoken, async(req,res)=>{
+            const email = req.params.email;
+            if(email !== req.decoded.email){
+              return res.status(403).send({message: 'forbidden access'})
+            }
+            const query = {email:email}
+            const user = await usercollection.findOne(query)
+            let users = false;
+            if(user){
+              users = user?.role == 'user';
+            }
+            
+            res.send({users})
+      })
+
+      
+
+
+        // ---------------------------------
 
         //----------------- all apartment api ------------------------------------ 
 
@@ -43,6 +142,24 @@ async function run() {
             const result = await apartmentcollection.find().toArray()
             res.send(result)
         })
+
+        //  update all apartment open to close
+        app.put('/apartment/:id', async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) }
+            const options = { upsert: true };
+            const bookingstatus = req.body
+            const apartment = {
+                $set: {
+                    booking: bookingstatus.booking
+
+
+                }
+            }
+            const result = await apartmentcollection.updateOne(filter, apartment, options)
+            res.send(result);
+        })
+
 
         // ---------------------------------------------------------------
 
@@ -82,7 +199,7 @@ async function run() {
             const marks = {
                 $set: {
                     status: updatemarks.status,
-
+                    acceptdate: updatemarks.acceptdate
 
                 }
             }
@@ -90,6 +207,14 @@ async function run() {
             res.send(result);
         })
 
+
+        // delete pending post
+        app.delete('/agrementapartment/:id', async (req, res) => {
+            const id = req.params.id
+            const query = { _id: new ObjectId(id) }
+            const coupon = await pendingagrecollection.deleteOne(query)
+            res.send(coupon)
+        })
         // --------------------------------------------
 
         // ------------------user api ---------------------
@@ -106,13 +231,16 @@ async function run() {
         })
 
 
+
+
         // get all users from db
-        app.get('/users', async (req, res) => {
+        app.get('/users', verifytoken, async (req, res) => {
+
             const result = await usercollection.find().toArray()
             res.send(result)
         })
 
-         
+
         // user update (user to admin) (admin to user)
         app.put('/users/:id', async (req, res) => {
             const id = req.params.id;
@@ -144,7 +272,7 @@ async function run() {
 
         // get announcement db to ui
         app.get('/announcement', async (req, res) => {
-            const result = await announcementcollection.find().sort({date: 'desc'}).toArray()
+            const result = await announcementcollection.find().sort({ date: 'desc' }).toArray()
             res.send(result)
         })
 
@@ -161,12 +289,88 @@ async function run() {
 
         // get all coupon
         app.get('/coupon', async (req, res) => {
-            const result = await couponcollection.find().sort({date: 'desc'}).toArray()
+            const result = await couponcollection.find().sort({ date: 'desc' }).toArray()
             res.send(result)
+        })
+
+        app.delete('/coupon/:id', async (req, res) => {
+            const id = req.params.id
+            const query = { _id: new ObjectId(id) }
+            const coupon = await couponcollection.deleteOne(query)
+            res.send(coupon)
         })
 
         // ----------------------------------------------
 
+        // --------------- payment api -----------------
+        app.post('/create-payment-intent', async (req, res) => {
+            const { price } = req.body
+            const amount = parseInt(price * 100)
+            console.log(amount, 'amount is the intent')
+
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: "usd",
+                payment_method_types: ['card']
+
+            })
+            res.send({
+                clientSecret: paymentIntent.client_secret
+            })
+        })
+
+        app.post('/payments', async (req, res) => {
+            const paymentconfirm = req.body;
+            const result = await paymentcollection.insertOne(paymentconfirm)
+            res.send(result)
+        })
+
+
+        app.get('/payments/:email', async (req, res) => {
+            const query = { email: req.params.email }
+            const result = await paymentcollection.find(query).sort({ paymentdate: 'desc' }).toArray()
+            res.send(result)
+        })
+        // --------------------------------------
+
+
+        //  --------------- pagination api ---------------------
+        // pagination1
+        // app.get('/apartmentcount', async (req, res) => {
+        //     const count = await apartmentcollection.estimatedDocumentCount();
+        //     res.send({ count })
+        // })
+
+        // // send ta from db(pagination part 2)
+        // app.get('/allapartment', async (req, res) => {
+        //     const page = parseInt(req.query.page)
+        //     const size = parseInt(req.query.size)
+
+        //     const result = await apartmentcollection.find()
+        //         .skip(page * size)
+        //         .limit(size)
+        //         .toArray();
+
+        //     res.send(result)
+        // })
+        // -----------------------------------------------------
+
+
+        // ----------- jwt api -------------------------------
+
+        app.post('/jwt', async (req, res) => {
+            const user = req.body
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+                expiresIn: '1h'
+            })
+            res.send({ token })
+        })
+
+
+
+
+
+        // ------------------------------------------------------
 
         // Send a ping to confirm a successful connection
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
