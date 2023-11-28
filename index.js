@@ -43,6 +43,15 @@ async function run() {
 
         //  ----------------middle ware verify token ---------------------------
 
+        app.post('/jwt', async (req, res) => {
+            const user = req.body
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+                expiresIn: '1h'
+            })
+            res.send({ token })
+        })
+
+
         const verifytoken = (req, res, next) => {
             console.log('inside verify token', req.headers)
             if (!req.headers.authorization) {
@@ -60,24 +69,24 @@ async function run() {
         }
 
 
-        const verifyAdmin = (async(req,res,next)=>{
+        const verifyAdmin = (async (req, res, next) => {
             const email = req.decoded.email
-            const query = {email:email};
+            const query = { email: email };
             const user = await usercollection.findOne(query)
             const isAdmin = user?.role === 'admin';
-            if(!isAdmin){
-                return res.status(403).send({message:'forbidden access'})
+            if (!isAdmin) {
+                return res.status(403).send({ message: 'forbidden access' })
             }
         })
 
 
-        const verifyMember = (async(req,res,next)=>{
+        const verifyMember = (async (req, res, next) => {
             const email = req.decoded.email
-            const query = {email:email};
+            const query = { email: email };
             const user = await usercollection.findOne(query)
             const isAdmin = user?.role === 'member';
-            if(!isAdmin){
-                return res.status(403).send({message:'forbidden access'})
+            if (!isAdmin) {
+                return res.status(403).send({ message: 'forbidden access' })
             }
         })
 
@@ -86,82 +95,57 @@ async function run() {
 
 
 
-        app.get('/user/admin/:email',verifytoken, async(req,res)=>{
-              const email = req.params.email;
-              if(email !== req.decoded.email){
-                return res.status(403).send({message: 'forbidden access'})
-              }
-              const query = {email:email}
-              const user = await usercollection.findOne(query)
-              let admin = false;
-              if(user){
-                admin = user?.role == 'admin';
-              }
-              
-              res.send({admin})
-        })
-
-        app.get('/user/member/:email',verifytoken, async(req,res)=>{
-              const email = req.params.email;
-              if(email !== req.decoded.email){
-                return res.status(403).send({message: 'forbidden access'})
-              }
-              const query = {email:email}
-              const user = await usercollection.findOne(query)
-              let member = false;
-              if(user){
-                member = user?.role == 'member';
-              }
-              
-              res.send({member})
-        })
-
-        app.get('/user/user/:email',verifytoken, async(req,res)=>{
+        app.get('/user/admin/:email', verifytoken, async (req, res) => {
             const email = req.params.email;
-            if(email !== req.decoded.email){
-              return res.status(403).send({message: 'forbidden access'})
+            if (email !== req.decoded.email) {
+                return res.status(403).send({ message: 'forbidden access' })
             }
-            const query = {email:email}
+            const query = { email: email }
+            const user = await usercollection.findOne(query)
+            let admin = false;
+            if (user) {
+                admin = user?.role == 'admin';
+            }
+
+            res.send({ admin })
+        })
+
+        app.get('/user/member/:email', verifytoken, async (req, res) => {
+            const email = req.params.email;
+            if (email !== req.decoded.email) {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
+            const query = { email: email }
+            const user = await usercollection.findOne(query)
+            let member = false;
+            if (user) {
+                member = user?.role == 'member';
+            }
+
+            res.send({ member })
+        })
+
+        app.get('/user/user/:email', verifytoken, async (req, res) => {
+            const email = req.params.email;
+            if (email !== req.decoded.email) {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
+            const query = { email: email }
             const user = await usercollection.findOne(query)
             let users = false;
-            if(user){
-              users = user?.role == 'user';
+            if (user) {
+                users = user?.role == 'user';
             }
-            
-            res.send({users})
-      })
 
-      
+            res.send({ users })
+        })
+
+
 
 
         // ---------------------------------
 
-        //----------------- all apartment api ------------------------------------ 
-
-        app.get('/apartment', async (req, res) => {
-            const result = await apartmentcollection.find().toArray()
-            res.send(result)
-        })
-
-        //  update all apartment open to close
-        app.put('/apartment/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) }
-            const options = { upsert: true };
-            const bookingstatus = req.body
-            const apartment = {
-                $set: {
-                    booking: bookingstatus.booking
-
-
-                }
-            }
-            const result = await apartmentcollection.updateOne(filter, apartment, options)
-            res.send(result);
-        })
-
-
-        // ---------------------------------------------------------------
+    
 
 
 
@@ -234,7 +218,7 @@ async function run() {
 
 
         // get all users from db
-        app.get('/users', verifytoken, async (req, res) => {
+        app.get('/users', async (req, res) => {
 
             const result = await usercollection.find().toArray()
             res.send(result)
@@ -319,6 +303,11 @@ async function run() {
             })
         })
 
+        app.get('/payments', async (req, res) => {
+            const result = await paymentcollection.find().sort().toArray()
+            res.send(result)
+        })
+
         app.post('/payments', async (req, res) => {
             const paymentconfirm = req.body;
             const result = await paymentcollection.insertOne(paymentconfirm)
@@ -334,37 +323,49 @@ async function run() {
         // --------------------------------------
 
 
-        //  --------------- pagination api ---------------------
-        // pagination1
-        // app.get('/apartmentcount', async (req, res) => {
-        //     const count = await apartmentcollection.estimatedDocumentCount();
-        //     res.send({ count })
-        // })
+        //  ---------------all apartment and pagination api ---------------------
 
-        // // send ta from db(pagination part 2)
-        // app.get('/allapartment', async (req, res) => {
-        //     const page = parseInt(req.query.page)
-        //     const size = parseInt(req.query.size)
+        app.post('/allapartment', async (req, res) => {
+            const newapartment = req.body;
+            const result = await apartmentcollection.insertOne(newapartment)
+            res.send(result)
+        })
 
-        //     const result = await apartmentcollection.find()
-        //         .skip(page * size)
-        //         .limit(size)
-        //         .toArray();
+        app.get('/allapartment', async (req, res) => {
+            const result = await apartmentcollection.find().sort().toArray()
+            res.send(result)
+        })
 
-        //     res.send(result)
-        // })
+        app.delete('/apartment/:id', async (req, res) => {
+            const id = req.params.id
+            const query = { _id: new ObjectId(id) }
+            const coupon = await apartmentcollection.deleteOne(query)
+            res.send(coupon)
+        })
+
+        app.get('/apartmentcount', async (req, res) => {
+            const count = await apartmentcollection.estimatedDocumentCount()
+            res.send({ count })
+        })
+
+
+        app.get('/apartment', async (req, res) => {
+            console.log('pagination', req.query)
+            const page = parseInt(req.query.page)
+            const size = parseInt(req.query.size)
+            const result = await apartmentcollection.find()
+                .skip(page * size)
+                .limit(size)
+                .toArray()
+            res.send(result)
+        })
+
+
         // -----------------------------------------------------
 
 
         // ----------- jwt api -------------------------------
 
-        app.post('/jwt', async (req, res) => {
-            const user = req.body
-            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
-                expiresIn: '1h'
-            })
-            res.send({ token })
-        })
 
 
 
