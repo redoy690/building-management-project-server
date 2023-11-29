@@ -54,12 +54,13 @@ async function run() {
 
         const verifytoken = (req, res, next) => {
             console.log('inside verify token', req.headers)
-            if (!req.headers.authorization) {
-                return res.status(401).send({ message: 'forbidden access' })
-            }
-            const token = req.headers.authorization.split(' ')[1]
-            jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
-                if (err) {
+            // if (!req.headers.authorization) {
+            //     return res.status(401).send({ message: 'forbidden access' })
+            // }
+            const token = req.headers.authorization.split(' ')[1];
+            // console.log(process.env.ACCESS_TOKEN_SECRET)
+            jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (error, decoded) => {
+                if (error) {
                     return res.status(401).send({ message: 'forbidden access' })
                 }
                 req.decoded = decoded;
@@ -154,6 +155,7 @@ async function run() {
         // pending apartment post
         app.post('/agrementapartment', async (req, res) => {
             const pendingItem = req.body;
+           
             const result = await pendingagrecollection.insertOne(pendingItem)
             res.send(result)
         })
@@ -161,7 +163,7 @@ async function run() {
 
         // pending apartment get
         app.get('/agrementapartment', async (req, res) => {
-            const result = await pendingagrecollection.find().toArray()
+            const result = await pendingagrecollection.find().sort({ date: 'desc' }).toArray()
             res.send(result)
         })
 
@@ -304,7 +306,7 @@ async function run() {
         })
 
         app.get('/payments', async (req, res) => {
-            const result = await paymentcollection.find().sort().toArray()
+            const result = await paymentcollection.find().sort({ paymentdate: 'desc' }).toArray()
             res.send(result)
         })
 
