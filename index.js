@@ -54,11 +54,11 @@ async function run() {
 
         const verifytoken = (req, res, next) => {
             console.log('inside verify token', req.headers)
-            // if (!req.headers.authorization) {
-            //     return res.status(401).send({ message: 'forbidden access' })
-            // }
+            if (!req.headers.authorization) {
+                return res.status(401).send({ message: 'unauthorized access' })
+            }
             const token = req.headers.authorization.split(' ')[1];
-            // console.log(process.env.ACCESS_TOKEN_SECRET)
+            console.log(process.env.ACCESS_TOKEN_SECRET)
             jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (error, decoded) => {
                 if (error) {
                     return res.status(401).send({ message: 'forbidden access' })
@@ -78,6 +78,7 @@ async function run() {
             if (!isAdmin) {
                 return res.status(403).send({ message: 'forbidden access' })
             }
+            next()
         })
 
 
@@ -89,6 +90,7 @@ async function run() {
             if (!isAdmin) {
                 return res.status(403).send({ message: 'forbidden access' })
             }
+            next()
         })
 
 
@@ -153,7 +155,7 @@ async function run() {
 
         // --------------  pending aggrement api ---------------------
         // pending apartment post
-        app.post('/agrementapartment', async (req, res) => {
+        app.post('/agrementapartment',verifytoken, async (req, res) => {
             const pendingItem = req.body;
            
             const result = await pendingagrecollection.insertOne(pendingItem)
@@ -169,7 +171,7 @@ async function run() {
 
 
         // one pending apartment get
-        app.get('/agrementapartment/:id', async (req, res) => {
+        app.get('/agrementapartment/:id',verifytoken, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await pendingagrecollection.findOne(query);
@@ -177,7 +179,7 @@ async function run() {
         })
 
         // update status pending to rejected
-        app.put('/agrementapartment/:id', async (req, res) => {
+        app.put('/agrementapartment/:id',verifytoken, async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) }
             const options = { upsert: true };
@@ -195,7 +197,7 @@ async function run() {
 
 
         // delete pending post
-        app.delete('/agrementapartment/:id', async (req, res) => {
+        app.delete('/agrementapartment/:id',verifytoken, async (req, res) => {
             const id = req.params.id
             const query = { _id: new ObjectId(id) }
             const coupon = await pendingagrecollection.deleteOne(query)
@@ -220,7 +222,7 @@ async function run() {
 
 
         // get all users from db
-        app.get('/users', async (req, res) => {
+        app.get('/users',verifytoken, async (req, res) => {
 
             const result = await usercollection.find().toArray()
             res.send(result)
@@ -228,7 +230,7 @@ async function run() {
 
 
         // user update (user to admin) (admin to user)
-        app.put('/users/:id', async (req, res) => {
+        app.put('/users/:id',verifytoken, async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) }
             const options = { upsert: true };
@@ -250,14 +252,14 @@ async function run() {
         //  -------------- announcement api --------------------------------
 
         // new announcement post ui to db
-        app.post('/announcement', async (req, res) => {
+        app.post('/announcement',verifytoken,verifyAdmin, async (req, res) => {
             const allannouncemnt = req.body;
             const result = await announcementcollection.insertOne(allannouncemnt)
             res.send(result)
         })
 
         // get announcement db to ui
-        app.get('/announcement', async (req, res) => {
+        app.get('/announcement',verifytoken, async (req, res) => {
             const result = await announcementcollection.find().sort({ date: 'desc' }).toArray()
             res.send(result)
         })
@@ -267,7 +269,7 @@ async function run() {
         // --------------------coupon api --------------------------
 
         // post all coupon
-        app.post('/coupon', async (req, res) => {
+        app.post('/coupon',verifytoken,verifyAdmin, async (req, res) => {
             const allcoupon = req.body;
             const result = await couponcollection.insertOne(allcoupon)
             res.send(result)
@@ -279,7 +281,7 @@ async function run() {
             res.send(result)
         })
 
-        app.delete('/coupon/:id', async (req, res) => {
+        app.delete('/coupon/:id',verifytoken,verifyAdmin, async (req, res) => {
             const id = req.params.id
             const query = { _id: new ObjectId(id) }
             const coupon = await couponcollection.deleteOne(query)
@@ -305,19 +307,19 @@ async function run() {
             })
         })
 
-        app.get('/payments', async (req, res) => {
+        app.get('/payments', verifytoken, async (req, res) => {
             const result = await paymentcollection.find().sort({ paymentdate: 'desc' }).toArray()
             res.send(result)
         })
 
-        app.post('/payments', async (req, res) => {
+        app.post('/payments', verifytoken, async (req, res) => {
             const paymentconfirm = req.body;
             const result = await paymentcollection.insertOne(paymentconfirm)
             res.send(result)
         })
 
 
-        app.get('/payments/:email', async (req, res) => {
+        app.get('/payments/:email',verifytoken, async (req, res) => {
             const query = { email: req.params.email }
             const result = await paymentcollection.find(query).sort({ paymentdate: 'desc' }).toArray()
             res.send(result)
@@ -327,7 +329,7 @@ async function run() {
 
         //  ---------------all apartment and pagination api ---------------------
 
-        app.post('/allapartment', async (req, res) => {
+        app.post('/allapartment',verifytoken,verifyAdmin, async (req, res) => {
             const newapartment = req.body;
             const result = await apartmentcollection.insertOne(newapartment)
             res.send(result)
